@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
 	"pet-project/internal/config"
+	"pet-project/internal/storage"
 )
 
 func main() {
@@ -19,5 +21,12 @@ func main() {
 		log.Fatalf("Failed to loading config: %v", err)
 	}
 
-	log.Printf("Config loaded successfully! Environment: %s", cfg.Env)
+	db, err := postgres.NewDB(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	defer db.Close()
+
+	fmt.Println("Succesfully connected to the database!")
 }

@@ -10,6 +10,6 @@ database:
   host: "localhost"
   port: 5432
   user: "postgres"
-  password: "postgres"
+  password: "14078068"
   dbname: "myapp_db"
   max_conns: 20
