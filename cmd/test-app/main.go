@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 
 	"pet-project/internal/app"
@@ -11,18 +12,18 @@ import (
 )
 
 func main() {
-	logger := logger.New()
-
 	configPath := os.Getenv("PET_CONFIG_PATH")
 	if configPath == "" {
 		configPath = "config.yaml"
-		logger.Info("Переменная PET_CONFIG_PATH не установлена, используется значение по умолчанию", "path", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		logger.Fatal(err, "Не удалось загрузить конфигурацию", "path", configPath)
+		slog.Error("Не удалось загрузить конфигурацию", "error", err, "path", configPath)
+		os.Exit(1)
 	}
+
+	logger := logger.New(cfg.Env)
 
 	ctx := context.Background()
 	repo, err := storage.NewDB(ctx, cfg, logger)
@@ -30,9 +31,9 @@ func main() {
 		logger.Fatal(err, "Не удалось инициализировать БД")
 	}
 	defer repo.Close()
-		
+
 	application := app.New(cfg, repo, logger)
-	if err := application.Run(); err != nil {
+	if err := application.Run(ctx); err != nil {
 		logger.Fatal(err, "Не удалось запустить приложение")
 	}
 }
