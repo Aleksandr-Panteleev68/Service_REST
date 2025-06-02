@@ -1,58 +1,38 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"context"
 	"os"
 
+	"pet-project/internal/app"
 	"pet-project/internal/config"
+	"pet-project/internal/logger"
 	"pet-project/internal/storage"
-	"pet-project/internal/domain"
 )
 
 func main() {
+	logger := logger.New()
+
 	configPath := os.Getenv("PET_CONFIG_PATH")
 	if configPath == "" {
 		configPath = "config.yaml"
-		log.Printf("PET_CONFIG_PATH not set, using default: %s", configPath)
+		logger.Info("Переменная PET_CONFIG_PATH не установлена, используется значение по умолчанию", "path", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		log.Fatalf("Failed to loading config: %v", err)
+		logger.Fatal(err, "Не удалось загрузить конфигурацию", "path", configPath)
 	}
 
-	repo, err := storage.NewDB(cfg)
+	ctx := context.Background()
+	repo, err := storage.NewDB(ctx, cfg, logger)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		logger.Fatal(err, "Не удалось инициализировать БД")
 	}
-	defer func() {
-		if err := repo.Close(); err != nil {
-			log.Printf("Failed to close database: %v", err)
-		}
-	}()
-
-	user := domain.User{
-		FirstName: "Иван",
-		LastName: "Иванов",
-		Age: 25,
-		IsMarried: false,
-		Password: "securepassword123",
-	}
-	id, err := repo.CreateUser(user)
-	if err != nil {
-		log.Fatalf("Failed to create user: %v", err)
-	}
-	fmt.Printf("Create user with ID: %d\n", id)
-
-	fetchedUser, err := repo.GetUserByID(id)
-	if err != nil {
-		log.Fatalf("Failed to get user: %v", err)
-	}
-	fmt.Printf("Fetched user: %+v\n",fetchedUser)
-
-	_, err = repo.CreateUser(user)
-	if err != nil {
-		fmt.Printf("Expected error: %v\n", err)
+	defer repo.Close()
+		
+	application := app.New(cfg, repo, logger)
+	if err := application.Run(); err != nil {
+		logger.Fatal(err, "Не удалось запустить приложение")
 	}
 }
