@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"pet-project/internal/config"
+	"pet-project/internal/domain"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -15,7 +16,7 @@ type PostgresStorage struct {
 	DB *sql.DB
 }
 
-func NewDB(cfg *config.Config) (*PostgresStorage, error) {
+func NewDB(cfg *config.Config) (UserRepository, error) {
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.Database.Host,
 		cfg.Database.Port,
@@ -41,7 +42,7 @@ func (d *PostgresStorage) Close() error {
 	return d.DB.Close()
 }
 
-func (s *PostgresStorage) CreateUser(user User) (int, error) {
+func (s *PostgresStorage) CreateUser(user domain.User) (int, error) {
 	log.Printf("Creating user: %s %s", user.FirstName, user.LastName)
 	query := `
 	INSERT INTO users (first_name, last_name, age, is_married, password)
@@ -52,7 +53,7 @@ func (s *PostgresStorage) CreateUser(user User) (int, error) {
 	err := s.DB.QueryRowContext(context.Background(), query, user.FirstName, user.LastName, user.Age, user.IsMarried, user.Password).Scan(&id)
 	if err != nil {
 		if err.Error() == `ERROR: duplicate key value violates unique constraint
-		"idx_user_name" (SQLSTATE 23505)`{
+		"idx_users_name" (SQLSTATE 23505)`{
 		return 0, fmt.Errorf("user with name %s %s already exists", user.FirstName, user.LastName)	
 		}
 		return 0, fmt.Errorf("failed to create user: %w", err)
@@ -62,28 +63,27 @@ func (s *PostgresStorage) CreateUser(user User) (int, error) {
 	return id, nil
 }
 
-func (s *PostgresStorage) GetUserByID(id int) (User, error) {
+func (s *PostgresStorage) GetUserByID(id int) (domain.User, error) {
 	log.Printf("Fetching user with ID: %d", id)
 	query := `
-	SELECT id, first_name, last_name, full_name, age, is_married, password
+	SELECT id, first_name, last_name, age, is_married, password
 	FROM users
 	WHERE id = $1
 	`
-	var user User
+	var user domain.User
 	err := s.DB.QueryRowContext(context.Background(), query, id).Scan(
 		&user.ID,
 		&user.FirstName,
 		&user.LastName,
-		&user.FullName,
 		&user.Age,
 		&user.IsMarried,
 		&user.Password,
 	)
 	if err == sql.ErrNoRows {
-		return User{}, fmt.Errorf("user not found")
+		return domain.User{}, fmt.Errorf("user not found")
 	}
 	if err != nil {
-		return User{}, fmt.Errorf("failed to get user: %w", err)
+		return domain.User{}, fmt.Errorf("failed to get user: %w", err)
 	}
 	log.Printf("Fetched user: %s %s", user.FirstName, user.LastName)
 	return user, nil

@@ -1,8 +1,13 @@
 package storage
 
+import(
+	"pet-project/internal/domain"
+)
+
 type UserRepository interface{
-	CreateUser(user User) (int, error)
-	GetUserByID(id int) (User, error)
+	CreateUser(user domain.User) (int, error)
+	GetUserByID(id int) (domain.User, error)
+	Close() error
 }
 
 //интерфейс для Product

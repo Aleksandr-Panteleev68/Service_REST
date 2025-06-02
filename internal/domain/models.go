@@ -1,4 +1,4 @@
-package storage
+package domain
 
 import "time"
 
@@ -6,7 +6,6 @@ type User struct {
 	ID        int
 	FirstName string
 	LastName  string
-	FullName  string
 	Age       int
 	IsMarried bool
 	Password  string

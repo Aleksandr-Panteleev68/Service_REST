@@ -7,6 +7,7 @@ import (
 
 	"pet-project/internal/config"
 	"pet-project/internal/storage"
+	"pet-project/internal/domain"
 )
 
 func main() {
@@ -21,29 +22,37 @@ func main() {
 		log.Fatalf("Failed to loading config: %v", err)
 	}
 
-	db, err := storage.NewDB(cfg)
+	repo, err := storage.NewDB(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
+	defer func() {
+		if err := repo.Close(); err != nil {
+			log.Printf("Failed to close database: %v", err)
+		}
+	}()
 
-	defer db.DB.Close()
-
-	user := storage.User{
+	user := domain.User{
 		FirstName: "Иван",
 		LastName: "Иванов",
 		Age: 25,
 		IsMarried: false,
 		Password: "securepassword123",
 	}
-	id, err := db.CreateUser(user)
+	id, err := repo.CreateUser(user)
 	if err != nil {
 		log.Fatalf("Failed to create user: %v", err)
 	}
 	fmt.Printf("Create user with ID: %d\n", id)
 
-	fetchedUser, err := db.GetUserByID(id)
+	fetchedUser, err := repo.GetUserByID(id)
 	if err != nil {
 		log.Fatalf("Failed to get user: %v", err)
 	}
 	fmt.Printf("Fetched user: %+v\n",fetchedUser)
+
+	_, err = repo.CreateUser(user)
+	if err != nil {
+		fmt.Printf("Expected error: %v\n", err)
+	}
 }
