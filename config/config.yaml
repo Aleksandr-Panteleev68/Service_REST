@@ -7,9 +7,9 @@ http_server:
   idle_timeout: 60s
 
 database:
-  host: "localhost"
+  host: localhost
   port: 5432
-  user: "postgres"
-  password: "14078068"
-  dbname: "myapp_db"
+  user: postgres
+  password: 14078068
+  dbname: postgres
   max_conns: 20
