@@ -13,7 +13,7 @@ import (
 
 type Application struct {
 	Config *config.Config
-	Service   service.Service
+	Service   service.UserService
 	Logger *logger.Logger
 }
 

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -58,18 +59,19 @@ func (s *PostgresStorage) Close() {
 func (s *PostgresStorage) CreateUser(ctx context.Context, user domain.User) (int64, error) {
 	s.logger.Info("Creating user", "first_name", user.FirstName, "last_name", user.LastName)
 	query := `
-	INSERT INTO users (first_name, last_name, age, is_married, password)
-	VALUES ($1, $2, $3, $4, $5)
-	RETURNING id
+		INSERT INTO users (first_name, last_name, age, is_married, password)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
 	`
 	var id int64
 	err := s.pool.QueryRow(ctx, query, user.FirstName, user.LastName, user.Age, user.IsMarried, user.Password).Scan(&id)
 	if err != nil {
-			if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_users_name" {
-				return 0, fmt.Errorf("user with name %s %s already exists", user.FirstName, user.LastName)
-			}
-			s.logger.Error(err, "Failed to create user", "first_name", user.FirstName, "last_name", user.LastName)
-			return 0, fmt.Errorf("failed to create user: %w", err)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgconn.ErrCodeUniqueViolation {
+			return 0, fmt.Errorf("user with name %s %s already exists", user.FirstName, user.LastName)
+		}
+		s.logger.Error(err, "Failed to create user", "first_name", user.FirstName, "last_name", user.LastName)
+		return 0, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	s.logger.Info("User created", "id", id)
@@ -79,9 +81,9 @@ func (s *PostgresStorage) CreateUser(ctx context.Context, user domain.User) (int
 func (s *PostgresStorage) GetUserByID(ctx context.Context, id int64) (domain.User, error) {
 	s.logger.Info("Fetching user", "id", id)
 	query := `
-	SELECT id, first_name, last_name, age, is_married, password
-	FROM users
-	WHERE id = $1
+		SELECT id, first_name, last_name, age, is_married, password
+		FROM users
+		WHERE id = $1
 	`
 	var user domain.User
 	err := s.pool.QueryRow(ctx, query, id).Scan(
@@ -92,7 +94,7 @@ func (s *PostgresStorage) GetUserByID(ctx context.Context, id int64) (domain.Use
 		&user.IsMarried,
 		&user.Password,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, fmt.Errorf("user not found")
 	}
 	if err != nil {
@@ -107,15 +109,15 @@ func (s *PostgresStorage) GetUserByID(ctx context.Context, id int64) (domain.Use
 func (s *PostgresStorage) CreateProduct(ctx context.Context, product domain.Product) (int64, error) {
 	s.logger.Info("Creating product", "description", product.Description)
 	query := `
-	INSERT INTO products (description, tags, quantity, price)
-	VALUES ($1, $2, $3, $4)
-	RETURNIG id`
+		INSERT INTO products (description, tags, quantity, price)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id`
 
 	var id int64
 	err := s.pool.QueryRow(ctx, query, product.Description, product.Tags, product.Quantity, product.Price).Scan(&id)
 	if err != nil {
 		s.logger.Error(err, "Failed to create product", "description", product.Description)
-		return 0, fmt.Errorf("failed to create product^ %w", err)
+		return 0, fmt.Errorf("failed to create product %w", err)
 	}
 
 	s.logger.Info("Product created", "id", id)
@@ -138,7 +140,7 @@ func (s *PostgresStorage) GetProductByID(ctx context.Context, id int64) (domain.
 		&product.Quantity,
 		&product.Price,
 	)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Product{}, fmt.Errorf("product not found")
 	}
 	if err != nil {
@@ -189,7 +191,8 @@ func (s *PostgresStorage) CreateOrder(ctx context.Context, userID int64, orderPr
 
 	err = tx.QueryRow(ctx, query, userID, time.Now(), totalPrice).Scan(&orderID)
 	if err != nil {
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23503" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgconn.ErrCodeForeignKeyViolation {
 			return 0, fmt.Errorf("user with id %d not found", userID)
 		}
 		s.logger.Error(err, "Failed to create order", "user_id", userID)
@@ -200,14 +203,14 @@ func (s *PostgresStorage) CreateOrder(ctx context.Context, userID int64, orderPr
 		var availableQty int
 		var price float64
 		query := `
-	SELECT quantity, price
-	FROM products
-	WHERE id = $1
-	FOR UPDATE
-	`
+			SELECT quantity, price
+			FROM products
+			WHERE id = $1
+			FOR UPDATE
+		`
 
 		err := tx.QueryRow(ctx, query, op.ProductID).Scan(&availableQty, &price)
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, fmt.Errorf("product with id %d not found", op.ProductID)
 		}
 		if err != nil {
@@ -219,12 +222,13 @@ func (s *PostgresStorage) CreateOrder(ctx context.Context, userID int64, orderPr
 		}
 
 		query = `
-		INSERT INTO order_product (order_id, product_id, quantity, price)
-		VALUES ($1, $2, $3, $4)
-	`
+			INSERT INTO order_product (order_id, product_id, quantity, price)
+			VALUES ($1, $2, $3, $4)
+		`
 		_, err = tx.Exec(ctx, query, orderID, op.ProductID, op.Quantity, price)
 		if err != nil {
-			if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == pgconn.ErrCodeUniqueViolation {
 				return 0, fmt.Errorf("product %d already exists in order %d", op.ProductID, orderID)
 			}
 			s.logger.Error(err, "Failed to add product to order", "product_id", op.ProductID)
@@ -232,9 +236,9 @@ func (s *PostgresStorage) CreateOrder(ctx context.Context, userID int64, orderPr
 		}
 
 		query = `
-		UPDATE products
-		SET quantity = quantity - $1
-		WHERE id = $2
+			UPDATE products
+			SET quantity = quantity - $1
+			WHERE id = $2
 		`
 		_, err = tx.Exec(ctx, query, op.Quantity, op.ProductID)
 		if err != nil {
@@ -255,13 +259,13 @@ func (s *PostgresStorage) CreateOrder(ctx context.Context, userID int64, orderPr
 func (s *PostgresStorage) GetOrderByID(ctx context.Context, id int64) (domain.Order, error) {
 	s.logger.Info("Fetching order", "id", id)
 	query := `
-	SELECT id, user_id, created_at, tota_price
-	FROM orders
-	WHERE id = $1
+		SELECT id, user_id, created_at, total_price
+		FROM orders
+		WHERE id = $1
 	`
 	var order domain.Order
 	err := s.pool.QueryRow(ctx, query, id).Scan(&order.ID, &order.UserID, &order.CreatedAt, &order.TotalPrice)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Order{}, fmt.Errorf("order not found")
 	}
 	if err != nil {
@@ -270,9 +274,9 @@ func (s *PostgresStorage) GetOrderByID(ctx context.Context, id int64) (domain.Or
 	}
 
 	query = `
-	SELECT order_id, product_id, quantity, price
-	FROM order_products
-	WHERE order_id = $1
+		SELECT order_id, product_id, quantity, price
+		FROM order_products
+		WHERE order_id = $1
 	`
 
 	rows, err := s.pool.Query(ctx, query, id)

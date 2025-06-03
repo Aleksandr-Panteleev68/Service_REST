@@ -30,7 +30,7 @@ type Order struct {
 
 type OrderProduct struct {
 	OrderID   int     `json:"order_id"`
-	ProductID int     `json:"prooduct_id"`
+	ProductID int     `json:"product_id"`
 	Quantity  int     `json:"quantity"`
 	Price     float64 `json:"price"`
 }

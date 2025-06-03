@@ -10,7 +10,7 @@ import (
 	"pet-project/internal/storage"
 )
 
-type Service interface {
+type UserService interface {
 	CreateUser(ctx context.Context, user domain.User) (int64, error)
 	GetUserByID(ctx context.Context, id int64) (domain.User, error)
 }
@@ -20,7 +20,7 @@ type service struct {
 	logger *logger.Logger
 }
 
-func New(repo *storage.PostgresStorage, logger *logger.Logger) Service {
+func New(repo *storage.PostgresStorage, logger *logger.Logger) *service {
 	return &service{
 		repo:   repo,
 		logger: logger,
@@ -28,7 +28,7 @@ func New(repo *storage.PostgresStorage, logger *logger.Logger) Service {
 }
 
 func (s *service) CreateUser(ctx context.Context, user domain.User) (int64, error) {
-	s.logger.Info("Validating user", "first_name", user.FirstName, "last_name", user.LastName)
+	s.logger.Debug("Validating user", "first_name", user.FirstName, "last_name", user.LastName)
 
 	if strings.TrimSpace(user.FirstName) == "" || strings.TrimSpace(user.LastName) == "" {
 		return 0, fmt.Errorf("first_name and last_name cannot be empty")
@@ -51,13 +51,13 @@ func (s *service) CreateUser(ctx context.Context, user domain.User) (int64, erro
 }
 
 func (s *service) GetUserByID(ctx context.Context, id int64) (domain.User, error) {
-	s.logger.Info("Fetching user", "id", id)
+	s.logger.Debug("Fetching user", "id", id)
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
 		s.logger.Error(err, "Failed to get user", "id", id)
 		return domain.User{}, err
 	}
 
-	s.logger.Info("User fetched successfully", "id", id, "full_name", user.FullName)
+	s.logger.Debug("User fetched successfully", "id", id, "full_name", user.FullName)
 	return user, nil
 }
