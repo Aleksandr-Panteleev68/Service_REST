@@ -35,7 +35,7 @@ func NewHandler(service service.UserService, logger *logger.Logger, config *conf
 
 func (h *Handler) setupRoutes() {
 	h.mux.HandleFunc("/users", h.handleUsers)
-	h.mux.HandleFunc("/users", h.handleUserByID)
+	h.mux.HandleFunc("/users/", h.handleUserByID)
 }
 
 func (h *Handler) loggingMiddleware(next http.Handler) http.Handler {
@@ -138,11 +138,11 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, message string) 
 
 func (h *Handler) StartServer(ctx context.Context) error {
 	server := &http.Server{
-		Addr: fmt.Sprintf("%s:%d", h.config.HTTPServer.Address, h.config.HTTPServer.Port),
-		Handler: h.loggingMiddleware(h.mux),
-		ReadTimeout: h.config.HTTPServer.Timeout,
+		Addr:         fmt.Sprintf("%s:%d", h.config.HTTPServer.Address, h.config.HTTPServer.Port),
+		Handler:      h.loggingMiddleware(h.mux),
+		ReadTimeout:  h.config.HTTPServer.Timeout,
 		WriteTimeout: h.config.HTTPServer.Timeout,
-		IdleTimeout: h.config.HTTPServer.IdleTimeout,
+		IdleTimeout:  h.config.HTTPServer.IdleTimeout,
 	}
 
 	go func() {
