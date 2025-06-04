@@ -2,12 +2,21 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
 	"pet-project/internal/domain"
 	"pet-project/internal/logger"
 	"pet-project/internal/storage"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+var (
+	ErrValidation = errors.New("validation error")
+	ErrConflict   = errors.New("conflict error")
+	ErrNotFound   = errors.New("not found error")
 )
 
 type UserService interface {
@@ -30,20 +39,15 @@ func New(repo *storage.PostgresStorage, logger *logger.Logger) *service {
 func (s *service) CreateUser(ctx context.Context, user domain.User) (int64, error) {
 	s.logger.Debug("Validating user", "first_name", user.FirstName, "last_name", user.LastName)
 
-	if strings.TrimSpace(user.FirstName) == "" || strings.TrimSpace(user.LastName) == "" {
-		return 0, fmt.Errorf("first_name and last_name cannot be empty")
-	}
-	if user.Age < 18 {
-		return 0, fmt.Errorf("age must be at least 18, got %d", user.Age)
-	}
-	if len(user.Password) < 8 {
-		return 0, fmt.Errorf("password must be at least 8 characters, got %d", len(user.Password))
-	}
-
 	id, err := s.repo.CreateUser(ctx, user)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == storage.ErrCodeUniqueViolation {
+			s.logger.Error(nil, "User already exists", "first_name", user.FirstName, "last_name", user.LastName)
+			return 0, fmt.Errorf("%w: user with name %s %s already exissts", ErrConflict, user.FirstName, user.LastName)
+		}
 		s.logger.Error(err, "Failed to create user", "first_name", user.FirstName, "last_name", user.LastName)
-		return 0, err
+		return 0, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	s.logger.Info("User created successfully", "id", id)
@@ -54,10 +58,14 @@ func (s *service) GetUserByID(ctx context.Context, id int64) (domain.User, error
 	s.logger.Debug("Fetching user", "id", id)
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			s.logger.Error(nil, "User not found", "id", id)
+			return domain.User{}, fmt.Errorf("%w: user with id %d not found", ErrNotFound, id)
+		}
 		s.logger.Error(err, "Failed to get user", "id", id)
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	s.logger.Debug("User fetched successfully", "id", id, "full_name", user.FullName)
+	s.logger.Debug("User fetched succesfully", "id", id)
 	return user, nil
 }

@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	errCodeUniqueViolation = "23505"
-	errCodeForeignKeyViolation = "23503"
-	errCodeNotNullViolation = "23502"
+	ErrCodeUniqueViolation = "23505"
+	ErrCodeForeignKeyViolation = "23503"
+	ErrCodeNotNullViolation = "23502"
 )
 
 type PostgresStorage struct {
@@ -73,7 +73,7 @@ func (s *PostgresStorage) CreateUser(ctx context.Context, user domain.User) (int
 	err := s.pool.QueryRow(ctx, query, user.FirstName, user.LastName, user.Age, user.IsMarried, user.Password).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == errCodeUniqueViolation {
+		if errors.As(err, &pgErr) && pgErr.Code == ErrCodeUniqueViolation {
 			return 0, fmt.Errorf("user with name %s %s already exists", user.FirstName, user.LastName)
 		}
 		s.logger.Error(err, "Failed to create user", "first_name", user.FirstName, "last_name", user.LastName)
@@ -87,7 +87,7 @@ func (s *PostgresStorage) CreateUser(ctx context.Context, user domain.User) (int
 func (s *PostgresStorage) GetUserByID(ctx context.Context, id int64) (domain.User, error) {
 	s.logger.Info("Fetching user", "id", id)
 	query := `
-		SELECT id, first_name, last_name, age, is_married, password
+		SELECT id, first_name, last_name, full_name, age, is_married, password
 		FROM users
 		WHERE id = $1
 	`
@@ -96,6 +96,7 @@ func (s *PostgresStorage) GetUserByID(ctx context.Context, id int64) (domain.Use
 		&user.ID,
 		&user.FirstName,
 		&user.LastName,
+		&user.FullName,
 		&user.Age,
 		&user.IsMarried,
 		&user.Password,
@@ -198,7 +199,7 @@ func (s *PostgresStorage) CreateOrder(ctx context.Context, userID int64, orderPr
 	err = tx.QueryRow(ctx, query, userID, time.Now(), totalPrice).Scan(&orderID)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == errCodeForeignKeyViolation {
+		if errors.As(err, &pgErr) && pgErr.Code == ErrCodeForeignKeyViolation {
 			return 0, fmt.Errorf("user with id %d not found", userID)
 		}
 		s.logger.Error(err, "Failed to create order", "user_id", userID)
@@ -234,7 +235,7 @@ func (s *PostgresStorage) CreateOrder(ctx context.Context, userID int64, orderPr
 		_, err = tx.Exec(ctx, query, orderID, op.ProductID, op.Quantity, price)
 		if err != nil {
 			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == errCodeUniqueViolation {
+			if errors.As(err, &pgErr) && pgErr.Code == ErrCodeUniqueViolation {
 				return 0, fmt.Errorf("product %d already exists in order %d", op.ProductID, orderID)
 			}
 			s.logger.Error(err, "Failed to add product to order", "product_id", op.ProductID)
