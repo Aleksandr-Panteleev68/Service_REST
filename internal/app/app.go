@@ -4,53 +4,38 @@ import (
 	"context"
 	"fmt"
 
+	"pet-project/internal/api"
 	"pet-project/internal/config"
-	"pet-project/internal/domain"
 	"pet-project/internal/logger"
 	"pet-project/internal/service"
 	"pet-project/internal/storage"
 )
 
 type Application struct {
-	Config *config.Config
-	Service   service.UserService
-	Logger *logger.Logger
+	Config  *config.Config
+	Service service.UserService
+	Logger  *logger.Logger
+	Handler *api.Handler
 }
 
 func New(cfg *config.Config, repo *storage.PostgresStorage, logger *logger.Logger) *Application {
 	svc := service.New(repo, logger)
+	handler := api.NewHandler(svc, logger, cfg)
 	return &Application{
 		Config:  cfg,
 		Service: svc,
 		Logger:  logger,
+		Handler: handler,
 	}
 }
 
 func (app *Application) Run(ctx context.Context) error {
-	
-	user := domain.User{
-		FirstName: "Иван",
-		LastName:  "Иванов",
-		Age:       25,
-		IsMarried: false,
-		Password:  "securepassword123",
-	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	id, err := app.Service.CreateUser(ctx, user)
-	if err != nil {
-		app.Logger.Fatal(err, "Не удалось создать пользователя", "user", fmt.Sprintf("%+v", user))
-	}
-	app.Logger.Info("Пользователь создан", "id", id)
-
-	fetchedUser, err := app.Service.GetUserByID(ctx, id)
-	if err != nil {
-		app.Logger.Fatal(err, "Не удалось получить пользователя", id)
-	}
-	app.Logger.Info("Пользователь получен", "user", fmt.Sprintf("%+v", fetchedUser))
-
-	_, err = app.Service.CreateUser(ctx, user)
-	if err != nil {
-		app.Logger.Info("Ожидаемая ошибка при создании дубликата пользователя", "error", err)
+	if err := app.Handler.StartServer(ctx); err != nil {
+		app.Logger.Error(err, "Failed to run HTTP server")
+		return fmt.Errorf("failed to run application: %w", err)
 	}
 
 	return nil
